@@ -1,5 +1,6 @@
 # folder
 .venv/
 __pycache__/
+.serena/
 
 # files
