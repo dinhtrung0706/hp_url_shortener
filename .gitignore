@@ -1,0 +1,5 @@
+# folder
+.venv/
+__pycache__/
+
+# files
