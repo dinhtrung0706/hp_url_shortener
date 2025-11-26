@@ -9,7 +9,9 @@ from redis import Redis
 app = FastAPI()
 
 # Database setup
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/shortener_db")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://user:password@localhost/shortener_db"
+)
 metadata = sqlalchemy.MetaData()
 
 urls = sqlalchemy.Table(
@@ -24,37 +26,48 @@ engine = sqlalchemy.create_engine(DATABASE_URL)
 metadata.create_all(engine)
 
 # Localhost configuration
-REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
-DB_HOST = os.getenv('DB_HOST', 'localhost')
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+DB_HOST = os.getenv("DB_HOST", "localhost")
 
 # Initialize Redis client
 redis_client = Redis(host=REDIS_HOST, port=6379, db=0)
 
-@app.get('/')
-def health_check() -> JSONResponse:
-    return JSONResponse({
-        "status": "running",
-        "message": "URL Shortener API is active!",
-        "pod_name": os.getenv('HOSTNAME', 'localmachine')
-    })
 
-@app.get('/redis-check')
-def redis_check() -> JSONResponse:
+@app.get("/")
+async def health_check() -> JSONResponse:
+    return JSONResponse(
+        {
+            "status": "running",
+            "message": "URL Shortener API is active!",
+            "pod_name": os.getenv("HOSTNAME", "localmachine"),
+        }
+    )
+
+
+@app.get("/redis-check")
+async def redis_check() -> JSONResponse:
     try:
         redis_client.ping()
-        return JSONResponse({"status": "Redis connected", "message": "Successfully connected to Redis!"})
+        return JSONResponse(
+            {"status": "Redis connected", "message": "Successfully connected to Redis!"}
+        )
     except Exception as e:
-        return JSONResponse({"status": "Redis connection error", "message": str(e)}), status.HTTP_500_INTERNAL_SERVER_ERROR
+        return (
+            JSONResponse({"status": "Redis connection error", "message": str(e)}),
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
 
 @app.post("/shorten")
-def create_short_url(url: dict) -> JSONResponse:
+async def create_short_url(url: dict) -> JSONResponse:
     long_url = url.get("url")
     if not long_url:
         raise HTTPException(status_code=400, detail="URL not provided")
 
-    short_url_hash = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(7))
-    full_short_url = f"http://{os.getenv('SERVICE_IP', 'your.ip')}/{short_url_hash}"
-
+    short_url_hash = "".join(
+        secrets.choice(string.ascii_letters + string.digits) for _ in range(7)
+    )
+    full_short_url = f"http://{os.getenv('SERVICE_IP', 'localhost')}/{short_url_hash}"
     # Save to PostgreSQL
     with engine.connect() as connection:
         query = urls.insert().values(short_url=short_url_hash, long_url=long_url)
@@ -66,8 +79,9 @@ def create_short_url(url: dict) -> JSONResponse:
 
     return JSONResponse({"short_url": full_short_url})
 
+
 @app.get("/{short_url_hash}")
-def redirect_to_long_url(short_url_hash: str) -> RedirectResponse:
+async def redirect_to_long_url(short_url_hash: str) -> RedirectResponse:
     # Check Redis first
     long_url = redis_client.get(short_url_hash)
     if long_url:
@@ -85,6 +99,8 @@ def redirect_to_long_url(short_url_hash: str) -> RedirectResponse:
         else:
             raise HTTPException(status_code=404, detail="Short URL not found")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host='0.0.0.0', port=5000)
+
+    uvicorn.run(app, host="0.0.0.0", port=5000)
